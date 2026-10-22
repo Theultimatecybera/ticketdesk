@@ -6,3 +6,4 @@ public enum TicketStatus {
     RESOLVED,
     CLOSED
 }
+

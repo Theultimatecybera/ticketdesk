@@ -139,3 +139,4 @@ class CommentServiceTest {
                 .hasMessageContaining("Ticket not found with id 999");
     }
 }
+

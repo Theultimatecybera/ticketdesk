@@ -14,3 +14,4 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     Page<Ticket> findByStatus(TicketStatus status, Pageable pageable);
     Page<Ticket> findByPriority(Priority priority, Pageable pageable);
 }
+

@@ -36,3 +36,4 @@ build/
 .env
 *.env.local
 *.log
+/src/main/resources/application-local.properties

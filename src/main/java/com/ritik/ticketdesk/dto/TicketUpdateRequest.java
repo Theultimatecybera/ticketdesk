@@ -49,3 +49,4 @@ public class TicketUpdateRequest {
         this.priority = priority;
     }
 }
+

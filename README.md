@@ -346,3 +346,4 @@ The status transition is validated in `TicketService.updateStatus()` using a str
 
 ### 5. How are database migrations and environments separated?
 Local development targets MySQL on port `3306` with `ddl-auto=update`. Tests run against an isolated in-memory H2 database (`src/test/resources/application.properties`) with `create-drop`, ensuring that the test suite runs in under 15 seconds without polluting local databases or requiring live credentials.
+

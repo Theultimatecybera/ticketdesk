@@ -241,3 +241,4 @@ class TicketServiceTest {
                 .hasMessageContaining("Page size must be between 1 and 100");
     }
 }
+

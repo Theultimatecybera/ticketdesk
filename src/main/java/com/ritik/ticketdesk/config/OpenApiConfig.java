@@ -20,3 +20,4 @@ public class OpenApiConfig {
                                 .name("Ritik Pal")));
     }
 }
+

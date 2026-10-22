@@ -109,3 +109,4 @@ class CommentControllerTest {
                 .andExpect(jsonPath("$.message").value("Ticket not found with id 999"));
     }
 }
+

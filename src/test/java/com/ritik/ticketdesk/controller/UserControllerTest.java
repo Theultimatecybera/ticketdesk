@@ -114,3 +114,4 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.path").value("/api/users/999"));
     }
 }
+

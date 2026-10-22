@@ -97,3 +97,4 @@ class UserServiceTest {
                 .hasMessageContaining("User not found with id 999");
     }
 }
+
