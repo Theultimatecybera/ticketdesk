@@ -1,0 +1,418 @@
+Java Project Guide – Ticket Management REST API
+Oct 22, 2026 · @RITIK PAL
+1. Project overview
+Build TicketDesk API: a Spring Boot REST backend with MySQL, full CRUD, validation, error handling and JUnit tests, in 7–10 days. It reuses the domain of your HelpDesk Pro project (tickets, users, comments), so you already understand the problem and can focus on learning Java and Spring.
+Why this project fits a Java intern resume
+• It covers what Java intern interviews ask: OOP, layered architecture, JPA/Hibernate, REST, exceptions, collections and unit testing.
+• It sits next to HelpDesk Pro, so you can explain what you rebuilt in Java and why.
+• It is small enough to finish and explain line by line. A finished small project beats an unfinished large one.
+Tech stack
+Area
+Choice
+Language
+Java 17 (LTS)
+Framework
+Spring Boot 3.x (Web, Data JPA, Validation)
+Database
+MySQL 8 (H2 in-memory for tests)
+Build tool
+Maven
+Testing
+JUnit 5, Mockito, MockMvc
+API docs
+springdoc-openapi (Swagger UI)
+Tools
+IntelliJ IDEA Community, Postman, Git/GitHub
+Scope (keep it fixed)
+• Entities: User, Ticket, Comment.
+• Ticket CRUD with status workflow (OPEN, IN_PROGRESS, RESOLVED, CLOSED), priority, search/filter and pagination.
+• Comments on tickets.
+• Input validation, a global exception handler and a consistent JSON error format.
+• At least 15 passing tests.
+Out of scope for now: JWT/Spring Security, Docker, frontend. Add them later as version 2 if time allows; do not add them to the resume before you have built them.
+2. Setup and project structure
+Install first
+1. JDK 17 (Temurin or Oracle) and check with java -version.
+2. IntelliJ IDEA Community Edition.
+3. MySQL 8 and MySQL Workbench. Create the database: CREATE DATABASE ticketdesk;
+4. Postman and Git.
+Create the project at start.spring.io
+• Project: Maven. Language: Java. Spring Boot: latest stable 3.x. Java: 17.
+• Group: com.ritik. Artifact: ticketdesk. Packaging: Jar.
+• Dependencies: Spring Web, Spring Data JPA, MySQL Driver, Validation, H2 Database (test scope).
+• After generating, add springdoc to pom.xml: org.springdoc:springdoc-openapi-starter-webmvc-ui (check the current version on its GitHub page).
+application.properties
+spring.datasource.url=jdbc:mysql://localhost:3306/ticketdesk
+spring.datasource.username=root
+spring.datasource.password=${DB_PASSWORD}
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+Read the password from an environment variable. Never push a real password to GitHub. Add .gitignore entries for target/, .idea/ and any local config.
+Package structure (layered architecture)
+com.ritik.ticketdesk
+├── controller      // HTTP layer: TicketController, CommentController
+├── service         // business logic: TicketService, CommentService
+├── repository      // DB access: TicketRepository, UserRepository ...
+├── entity          // JPA classes: User, Ticket, Comment, enums
+├── dto             // request/response objects
+├── exception       // custom exceptions + GlobalExceptionHandler
+└── TicketDeskApplication.java
+The request flow is: Controller → Service → Repository → MySQL. The controller never talks to the repository directly, and entities are never returned to the client; DTOs are. Be ready to explain this in an interview.
+3. Database design
+Three tables with two one-to-many relationships: one user creates many tickets, and one ticket has many comments. Hibernate creates the tables from your entities (ddl-auto=update), but write the schema yourself once so you understand it.
+CREATE TABLE users (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  role VARCHAR(20) NOT NULL,            -- USER or ADMIN
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE tickets (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  status VARCHAR(20) NOT NULL,          -- OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority VARCHAR(20) NOT NULL,        -- LOW, MEDIUM, HIGH
+  created_by BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE TABLE comments (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  ticket_id BIGINT NOT NULL,
+  author_id BIGINT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (ticket_id) REFERENCES tickets(id) ON DELETE CASCADE,
+  FOREIGN KEY (author_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_tickets_status ON tickets(status);
+Design points to be able to explain
+• status and priority are Java enums stored as strings (@Enumerated(EnumType.STRING)), not numbers.
+• The index on status speeds up filtering tickets by status.
+• Use @ManyToOne(fetch = FetchType.LAZY) for relations and know why (it avoids loading data you do not need).
+4. API endpoints
+Method
+Endpoint
+Purpose
+Success
+POST
+/api/users
+Create a user
+201
+GET
+/api/users/{id}
+Get one user
+200
+POST
+/api/tickets
+Create a ticket
+201
+GET
+/api/tickets
+List tickets (filter by status, priority; paging with page, size)
+200
+GET
+/api/tickets/{id}
+Get one ticket
+200
+PUT
+/api/tickets/{id}
+Update title, description, priority
+200
+PATCH
+/api/tickets/{id}/status
+Change status (OPEN → IN_PROGRESS → RESOLVED → CLOSED)
+200
+DELETE
+/api/tickets/{id}
+Delete a ticket
+204
+POST
+/api/tickets/{id}/comments
+Add a comment
+201
+GET
+/api/tickets/{id}/comments
+List comments of a ticket
+200
+Create ticket: request
+POST /api/tickets
+{
+  "title": "Login page not loading",
+  "description": "Page shows a blank screen after submit",
+  "priority": "HIGH",
+  "createdBy": 1
+}
+Response (201 Created)
+{
+  "id": 12,
+  "title": "Login page not loading",
+  "description": "Page shows a blank screen after submit",
+  "status": "OPEN",
+  "priority": "HIGH",
+  "createdBy": 1,
+  "createdAt": "2026-10-22T19:10:00"
+}
+Error format (same everywhere)
+{
+  "timestamp": "2026-10-22T19:12:00",
+  "status": 404,
+  "error": "Not Found",
+  "message": "Ticket not found with id 99",
+  "path": "/api/tickets/99"
+}
+Rules to implement
+• title is required, 5 to 200 characters. priority must be LOW, MEDIUM or HIGH. Missing or bad input returns 400 with a field-wise message.
+• Unknown ticket or user returns 404.
+• A status cannot move backwards or skip a step (for example OPEN → CLOSED returns 400). This is real business logic that interviewers like to ask about.
+• Duplicate email on user creation returns 409.
+5. Core code samples
+These are skeletons for the Ticket flow. Type them yourself (do not paste blindly), then build User and Comment the same way. Imports are omitted for space; IntelliJ adds them.
+Entity: entity/Ticket.java
+@Entity
+@Table(name = "tickets")
+public class Ticket {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 200)
+    private String title;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    @Enumerated(EnumType.STRING)
+    private TicketStatus status = TicketStatus.OPEN;
+
+    @Enumerated(EnumType.STRING)
+    private Priority priority;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by", nullable = false)
+    private User createdBy;
+
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    // constructors, getters, setters
+}
+Enum with transition rule: entity/TicketStatus.java
+public enum TicketStatus {
+    OPEN, IN_PROGRESS, RESOLVED, CLOSED;
+
+    public boolean canMoveTo(TicketStatus next) {
+        return next.ordinal() == this.ordinal() + 1;
+    }
+}
+Repository: repository/TicketRepository.java
+public interface TicketRepository extends JpaRepository<Ticket, Long> {
+    Page<Ticket> findByStatus(TicketStatus status, Pageable pageable);
+    Page<Ticket> findByStatusAndPriority(TicketStatus status, Priority priority, Pageable pageable);
+}
+DTO: dto/TicketRequest.java (use a Java record)
+public record TicketRequest(
+    @NotBlank @Size(min = 5, max = 200) String title,
+    String description,
+    @NotNull Priority priority,
+    @NotNull Long createdBy
+) {}
+Service: service/TicketService.java
+@Service
+public class TicketService {
+    private final TicketRepository ticketRepository;
+    private final UserRepository userRepository;
+
+    public TicketService(TicketRepository ticketRepository, UserRepository userRepository) {
+        this.ticketRepository = ticketRepository;
+        this.userRepository = userRepository;
+    }
+
+    public TicketResponse create(TicketRequest req) {
+        User user = userRepository.findById(req.createdBy())
+            .orElseThrow(() -> new ResourceNotFoundException("User not found with id " + req.createdBy()));
+        Ticket ticket = new Ticket();
+        ticket.setTitle(req.title());
+        ticket.setDescription(req.description());
+        ticket.setPriority(req.priority());
+        ticket.setCreatedBy(user);
+        return TicketResponse.from(ticketRepository.save(ticket));
+    }
+
+    public TicketResponse updateStatus(Long id, TicketStatus next) {
+        Ticket ticket = ticketRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Ticket not found with id " + id));
+        if (!ticket.getStatus().canMoveTo(next)) {
+            throw new InvalidStatusTransitionException(ticket.getStatus() + " -> " + next);
+        }
+        ticket.setStatus(next);
+        return TicketResponse.from(ticketRepository.save(ticket));
+    }
+}
+Controller: controller/TicketController.java
+@RestController
+@RequestMapping("/api/tickets")
+public class TicketController {
+    private final TicketService ticketService;
+
+    public TicketController(TicketService ticketService) {
+        this.ticketService = ticketService;
+    }
+
+    @PostMapping
+    public ResponseEntity<TicketResponse> create(@Valid @RequestBody TicketRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ticketService.create(req));
+    }
+
+    @PatchMapping("/{id}/status")
+    public TicketResponse updateStatus(@PathVariable Long id, @RequestParam TicketStatus status) {
+        return ticketService.updateStatus(id, status);
+    }
+}
+Global exception handler: exception/GlobalExceptionHandler.java
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiError> notFound(ResourceNotFoundException ex, HttpServletRequest req) {
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), req);
+    }
+
+    @ExceptionHandler(InvalidStatusTransitionException.class)
+    public ResponseEntity<ApiError> badTransition(InvalidStatusTransitionException ex, HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, "Invalid status change: " + ex.getMessage(), req);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> validation(MethodArgumentNotValidException ex, HttpServletRequest req) {
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+            .map(e -> e.getField() + ": " + e.getDefaultMessage())
+            .collect(Collectors.joining("; "));
+        return build(HttpStatus.BAD_REQUEST, msg, req);
+    }
+
+    private ResponseEntity<ApiError> build(HttpStatus status, String msg, HttpServletRequest req) {
+        return ResponseEntity.status(status)
+            .body(new ApiError(LocalDateTime.now(), status.value(), status.getReasonPhrase(), msg, req.getRequestURI()));
+    }
+}
+Create ResourceNotFoundException, InvalidStatusTransitionException (both extend RuntimeException) and the ApiError record yourself. Constructor injection (not @Autowired on fields) is the better practice and a common interview question.
+6. Testing with JUnit 5 and Mockito
+Target: at least 15 tests across three levels. spring-boot-starter-test already includes JUnit 5, Mockito and MockMvc.
+Level
+What it tests
+Tools
+Minimum tests
+Service unit tests
+Business logic with a fake repository
+JUnit 5 + Mockito
+8
+Controller tests
+HTTP status, JSON, validation errors
+@WebMvcTest + MockMvc
+5
+Repository test
+Custom query methods against H2
+@DataJpaTest
+2
+Service test example: TicketServiceTest
+@ExtendWith(MockitoExtension.class)
+class TicketServiceTest {
+
+    @Mock TicketRepository ticketRepository;
+    @Mock UserRepository userRepository;
+    @InjectMocks TicketService ticketService;
+
+    @Test
+    void create_throwsWhenUserNotFound() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+        TicketRequest req = new TicketRequest("Login broken", "desc", Priority.HIGH, 99L);
+
+        assertThrows(ResourceNotFoundException.class, () -> ticketService.create(req));
+        verify(ticketRepository, never()).save(any());
+    }
+
+    @Test
+    void updateStatus_rejectsSkippingAStep() {
+        Ticket t = new Ticket();            // status defaults to OPEN
+        when(ticketRepository.findById(1L)).thenReturn(Optional.of(t));
+
+        assertThrows(InvalidStatusTransitionException.class,
+            () -> ticketService.updateStatus(1L, TicketStatus.CLOSED));
+    }
+}
+Controller test example: TicketControllerTest
+@WebMvcTest(TicketController.class)
+class TicketControllerTest {
+
+    @Autowired MockMvc mockMvc;
+    @MockBean TicketService ticketService;
+
+    @Test
+    void create_returns400_whenTitleIsBlank() throws Exception {
+        String body = """
+            {"title":"","priority":"HIGH","createdBy":1}
+            """;
+        mockMvc.perform(post("/api/tickets")
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isBadRequest());
+    }
+}
+Cases that must be covered
+• Create ticket: success, user not found, blank title, invalid priority.
+• Status: each valid step passes; skipping a step or going backwards fails.
+• Get/delete: existing id works; unknown id returns 404.
+• Filtering by status and pagination return the expected page.
+• Duplicate email returns 409.
+Run everything with mvn test. Put the passing result (a screenshot or a short line) in the README. Check coverage in IntelliJ (Run with Coverage) and aim for about 70% on the service layer; only quote the number you actually measure.
+7. Day-by-day plan, GitHub and README
+Day
+Work
+Done when
+1
+Install tools, generate project, connect MySQL, run the app
+App starts, tables appear in MySQL
+2
+Entities, enums, repositories (User, Ticket, Comment)
+Save and read a ticket from a test class
+3
+Ticket create, get, list, DTOs, service and controller
+Postman calls work
+4
+Update, delete, status workflow with transition rule
+Invalid status jump returns 400
+5
+Validation, custom exceptions, GlobalExceptionHandler
+Every error uses the same JSON format
+6
+Filtering and pagination; comments endpoints
+?status=OPEN&page=0&size=5 works
+7
+Service unit tests with Mockito
+8 tests green
+8
+Controller and repository tests
+15+ tests green with mvn test
+9
+Swagger UI, Postman collection, README, clean-up
+A stranger can run it from the README
+10
+Buffer: fix bugs, practise explaining the code aloud
+You can explain every class
+If a test annotation shows as deprecated in your Spring Boot version (for example @MockBean, replaced by @MockitoBean in newer 3.4+ releases), use the newer one the IDE suggests.
+GitHub rules
+• Name the repo ticketdesk-api. Commit daily with clear messages such as Add ticket status transition rule and Add service tests for ticket creation. Do not make one giant commit.
+• Add topics: java, spring-boot, rest-api, mysql, junit5, mockito.
+• Pin the repo on your GitHub profile.
+README must contain
+1. One-paragraph description and the tech stack.
+2. Architecture: the layer diagram or the package structure above.
+3. How to run: prerequisites, create database, set DB_PASSWORD, mvn spring-boot:run.
+4. Endpoint table (from section 4) and a Swagger URL: http://localhost:8080/swagger-ui.html.
+5. How to run tests: mvn test, with the real result.
+6. Sample requests and responses, and a short list of what you would add next (JWT, Docker, caching).
